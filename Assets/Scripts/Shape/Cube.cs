@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+<<<<<<< Updated upstream
 using DG.Tweening;
 using UnityEngine.EventSystems;
 
@@ -180,4 +181,14 @@ public class Cube : Shape
         disco.SetShapeData(BoardManager.Instance.DiscoShapeData, _row, _col);
         Destroy(gameObject.GetComponent<Cube>());
     }
+=======
+
+public class Cube : Shape
+{
+    public override void Explode()
+    {
+        Instantiate(_shapeData.ExplodeEffect, transform.position, transform.rotation, transform.parent);
+        Destroy(gameObject);
+    }
+>>>>>>> Stashed changes
 }

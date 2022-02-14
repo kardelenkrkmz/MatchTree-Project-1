@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -20,3 +21,16 @@ public class Bomb : Shape
         Explode();
     }
 }
+=======
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class Bomb : Shape
+{
+    public override void Explode()
+    {
+        throw new System.NotImplementedException();
+    }
+}
+>>>>>>> Stashed changes

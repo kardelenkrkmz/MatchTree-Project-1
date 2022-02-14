@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
 --- !u!114 &11400000
@@ -15,3 +16,21 @@ MonoBehaviour:
   _shapeType: 4
   _sprite: {fileID: 2680583949415897599, guid: 92e2cd4a996def347ab88564e216bf68, type: 3}
   _explodeEffect: {fileID: 8329759151436887374, guid: c2d7e103cebad604186f531ce8248253, type: 3}
+=======
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fc9244f80a95c6349b64c11804b062fe, type: 3}
+  m_Name: Rocket
+  m_EditorClassIdentifier: 
+  shapeType: 4
+  sprite: {fileID: 0}
+>>>>>>> Stashed changes
