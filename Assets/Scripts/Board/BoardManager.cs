@@ -2,24 +2,34 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 
 public class BoardManager : MonoBehaviour
 {
     private static BoardManager _instance;
-    private int RefillStartPos = 3;
+    private int RefillStartPos = 4;
+
+    public ShapeData RocketShapeData;
+    public ShapeData DiscoShapeData;
+    public ShapeData BombShapeData;
 
     [SerializeField] private ShapeData[] shapesData;
     [SerializeField] private GameObject shapePrefab;
+    [SerializeField] private GameObject tint;
+    [SerializeField] private GameObject noMovesLeft;
+    [SerializeField] private Text moves;
 
     [SerializeField] private int rows;
     [SerializeField] private int columns;
 
+    [SerializeField] private int remainingMoves;
+
     [SerializeField] private float paddingHorizontal;
     [SerializeField] private float paddingBottom;
 
-    
+
     private SpriteRenderer _shapeSpriteRenderer;
-    private GameObject[,] _instantiatedShapes;
+    private Shape[,] _instantiatedShapes;
     private List<Shape> _adjacentShapes;
     private Dictionary<int, int> _distinctColumns;
 
@@ -49,23 +59,30 @@ public class BoardManager : MonoBehaviour
 
         SetShapeRect();
         CreateTiles();
+        int.TryParse(moves.text, out remainingMoves);
     }
 
     private void Update()
     {
         if (Input.GetKeyDown(KeyCode.Space))
         {
+            Vector2 offset = _shapeSpriteRenderer.bounds.size;
+            Vector3 instantiatedTransform = new Vector3(2 * offset.x,
+                                                            offset.y * 3,
+                                                            0f);
+
+            CreateShape(instantiatedTransform, 2, 3).transform.localPosition = instantiatedTransform;
         }
     }
 
     public void restart()
     {
-        Application.LoadLevel(Application.loadedLevel);
+        SceneManager.LoadScene(0);
     }
 
     public void CreateTiles()
     {
-        _instantiatedShapes = new GameObject[rows, columns];
+        _instantiatedShapes = new Shape[rows, columns];
 
         Vector2 offset = _shapeSpriteRenderer.bounds.size;
 
@@ -115,16 +132,15 @@ public class BoardManager : MonoBehaviour
         transform.position = _transform;
     }
 
-    private GameObject CreateShape(Vector3 instantiateTransform, int i, int j)
+    private Shape CreateShape(Vector3 instantiateTransform, int i, int j)
     {
         ShapeData randomShape = RandomShape();
-        _shapeSpriteRenderer.sprite = randomShape.Sprite;
 
         GameObject instantiatedShape = Instantiate(shapePrefab, instantiateTransform, shapePrefab.transform.rotation, transform);
         Shape _shape = instantiatedShape.AddComponent<Cube>();
         _shape.SetShapeData(randomShape, i, j);
 
-        return instantiatedShape;
+        return _shape;
     }
 
     private ShapeData RandomShape()
@@ -133,22 +149,7 @@ public class BoardManager : MonoBehaviour
         return shapesData[randInt];
     }
 
-    public void HandleShiftDown()
-    {
-        if (_adjacentShapes.Count > 1)
-        {
-            foreach (Shape shape in _adjacentShapes)
-            {
-                _instantiatedShapes[shape.row, shape.col] = null;
-                shape.Explode();
-            }
-        }
-
-        StartShiftDown();
-        RefillBoard();
-    }
-
-    private void StartShiftDown()
+    public void StartShiftDown()
     {
         FindDistinctColums();
 
@@ -162,6 +163,8 @@ public class BoardManager : MonoBehaviour
         }
 
         _adjacentShapes.Clear();
+
+        RefillBoard();
     }
 
     public void AddShapeToAdjacentShapes(Shape shape)
@@ -182,34 +185,64 @@ public class BoardManager : MonoBehaviour
     {
         foreach (Shape shape in _adjacentShapes)
         {
-            if (!_distinctColumns.ContainsKey(shape.col))
-                _distinctColumns.Add(shape.col, 1);
+            if (!_distinctColumns.ContainsKey(shape._col))
+                _distinctColumns.Add(shape._col, 1);
             else
-                _distinctColumns[shape.col]++;
+                _distinctColumns[shape._col]++;
         }
     }
 
-    private void RefillBoard()
+    public void RefillBoard()
     {
         Vector2 offset = _shapeSpriteRenderer.bounds.size;
 
-        foreach (int k in _distinctColumns.Keys)
+        if (remainingMoves > 1)
         {
-            int counter = RefillStartPos;
-            Vector3 instantiatedTransform = new Vector3(offset.x * k,
-                                                        offset.y * rows,
-                                                        0f);
+            remainingMoves--;
+            moves.text = remainingMoves.ToString();
 
-            for (int i = 0; i < _distinctColumns[k]; i++)
+
+            foreach (int k in _distinctColumns.Keys)
             {
-                GameObject refillShape =  CreateShape(instantiatedTransform, rows + counter, k);
-                refillShape.transform.localPosition = new Vector3(offset.x * k, offset.y * (rows + counter), 0f);
-                refillShape.GetComponent<Shape>().ShiftDown(true);
-                counter++;
+                int counter = RefillStartPos;
+                Vector3 instantiatedTransform = new Vector3(offset.x * k,
+                                                            offset.y * rows,
+                                                            0f);
+
+                for (int i = 0; i < _distinctColumns[k]; i++)
+                {
+                    Shape refillShape = CreateShape(instantiatedTransform, rows + counter, k);
+                    refillShape.transform.localPosition = new Vector3(offset.x * k, offset.y * (rows + counter), 0f);
+                    refillShape.GetComponent<Shape>().ShiftDown(true);
+                    counter++;
+                }
             }
         }
-
+        else if (remainingMoves == 1)
+        {
+            moves.text = "0";
+            StartCoroutine(RestartButtonWithDelay(1.2f));
+        }
         _distinctColumns.Clear();
+    }
+
+    public void ReloadShapeToList(Shape shape, int row, int col)
+    {
+        _instantiatedShapes[row, col] = shape;
+    }
+
+    public Dictionary<int, int> GetDistinctColumns()
+    {
+        return _distinctColumns;
+    } 
+
+    public List<Shape> GetAdjacentShapes()
+    {
+        return _adjacentShapes;
+    }
+    public Shape[,] GetInstantiatedShapes()
+    {
+        return _instantiatedShapes;
     }
 
     public int GetRowCount()
@@ -222,14 +255,33 @@ public class BoardManager : MonoBehaviour
         return columns;
     }
 
-    public GameObject[,] GetShapeMatrix()
+    public Shape[,] GetShapeMatrix()
     {
         return _instantiatedShapes;
     }
 
+    public void RemoveFromInstantiatedShapes(int row, int col)
+    {
+        _instantiatedShapes[row, col] = null;
+    }
+
+    public void DestroyShape(Shape shape)
+    {
+        _instantiatedShapes[shape._row, shape._col] = null;
+        Destroy(shape.gameObject);
+    }
+
     public void DestroyInstantiatedShapes()
     {
-        foreach (GameObject shape in _instantiatedShapes)
+        foreach (Shape shape in _instantiatedShapes)
             Destroy(shape);
     }
+
+    IEnumerator RestartButtonWithDelay(float time)
+    {
+        yield return new WaitForSeconds(time);
+        noMovesLeft.SetActive(true);
+        tint.SetActive(true);
+    }
+
 }

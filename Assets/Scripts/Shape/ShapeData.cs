@@ -4,7 +4,7 @@ using UnityEngine;
 
 public enum ShapeType
 {
-    BlueCube, RedCube, GreenCube, Bomb, Rocket
+    BlueCube, RedCube, GreenCube, Bomb, Rocket, Disco
 }
 
 [CreateAssetMenu(fileName = "New Shape", menuName = "Shape Data", order = 51)]
@@ -13,9 +13,11 @@ public class ShapeData : ScriptableObject
 {
     [SerializeField]
     private ShapeType _shapeType;
+
     [SerializeField]
     private Sprite _sprite;
-    [SerializeField]
+
+    [SerializeField] 
     private GameObject _explodeEffect;
 
     public ShapeType ShapeType
