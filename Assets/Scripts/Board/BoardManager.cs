@@ -1,35 +1,45 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 
+public enum GameState
+{
+    Ready, Merging, BoosterExplosion
+}
+
 public class BoardManager : MonoBehaviour
 {
     private static BoardManager _instance;
-    private int RefillStartPos = 4;
+    private const int RefillStartPos = 5;
 
-    public ShapeData RocketShapeData;
-    public ShapeData DiscoShapeData;
-    public ShapeData BombShapeData;
+    public GameState gameState;
 
-    [SerializeField] private ShapeData[] shapesData;
+    public GameObject RocketMergeEffect;
+    public GameObject BombMergeEffect;
+    public GameObject DiscoMergeEffect;
+
+    [SerializeField] private ShapeData[] shapeDatas;
+    [SerializeField] private List<Sprite> mergeSprites;
+    [SerializeField] private ShapeData[] BasicCubes;
     [SerializeField] private GameObject shapePrefab;
     [SerializeField] private GameObject tint;
     [SerializeField] private GameObject noMovesLeft;
     [SerializeField] private Text moves;
 
-    [SerializeField] private int rows;
-    [SerializeField] private int columns;
+    [SerializeField] public int rows;
+    [SerializeField] public int columns;
 
     [SerializeField] private int remainingMoves;
 
     [SerializeField] private float paddingHorizontal;
     [SerializeField] private float paddingBottom;
 
-
     private SpriteRenderer _shapeSpriteRenderer;
     private Shape[,] _instantiatedShapes;
+    private List<int> _explodedRows;
     private List<Shape> _adjacentShapes;
     private Dictionary<int, int> _distinctColumns;
 
@@ -53,29 +63,25 @@ public class BoardManager : MonoBehaviour
 
     private void Start()
     {
-        _adjacentShapes = new List<Shape>();
+        _explodedRows = new List<int>();
         _distinctColumns = new Dictionary<int, int>();
         _shapeSpriteRenderer = shapePrefab.GetComponent<SpriteRenderer>();
 
         SetShapeRect();
         CreateTiles();
         int.TryParse(moves.text, out remainingMoves);
+        gameState = GameState.Ready;
+        FindMerges();
     }
 
     private void Update()
     {
         if (Input.GetKeyDown(KeyCode.Space))
         {
-            Vector2 offset = _shapeSpriteRenderer.bounds.size;
-            Vector3 instantiatedTransform = new Vector3(2 * offset.x,
-                                                            offset.y * 3,
-                                                            0f);
-
-            CreateShape(instantiatedTransform, 2, 3).transform.localPosition = instantiatedTransform;
         }
     }
 
-    public void restart()
+    public void Restart()
     {
         SceneManager.LoadScene(0);
     }
@@ -91,7 +97,7 @@ public class BoardManager : MonoBehaviour
             for (int j = 0; j < columns; j++)
             {
                 Vector3 instantiatedTransform = new Vector3(j * offset.x,
-                                                            offset.y * i,
+                                                            (offset.y - 0.08f) * i,
                                                             0f);
 
                 _instantiatedShapes[i, j] = CreateShape(instantiatedTransform, i, j);
@@ -107,7 +113,7 @@ public class BoardManager : MonoBehaviour
         float width = height * Screen.width / Screen.height;
 
         float shapeRect = _shapeSpriteRenderer.sprite.textureRect.width / _shapeSpriteRenderer.sprite.pixelsPerUnit * columns;
-        shapeRect += paddingHorizontal * 2;
+        shapeRect += (paddingHorizontal / 10) * 2;
         _shapeSpriteRenderer.transform.localScale = new Vector3(width / shapeRect, width / shapeRect);
     }
 
@@ -139,14 +145,28 @@ public class BoardManager : MonoBehaviour
         GameObject instantiatedShape = Instantiate(shapePrefab, instantiateTransform, shapePrefab.transform.rotation, transform);
         Shape _shape = instantiatedShape.AddComponent<Cube>();
         _shape.SetShapeData(randomShape, i, j);
-
+        
         return _shape;
     }
 
     private ShapeData RandomShape()
     {
-        int randInt = Random.Range(0, shapesData.Length);
-        return shapesData[randInt];
+        int randInt = Random.Range(0, BasicCubes.Length);
+        return BasicCubes[randInt];
+    }
+
+    public bool IsShapeCheckedBefore(List<Shape> adjacentShapes, Shape _shape)
+    {
+        foreach (Shape shape in adjacentShapes)
+            if (shape == _shape)
+                return true;
+
+        return false;
+    }
+
+    public void SetAdjacentShapes(List<Shape> adjacentShapes)
+    {
+        _adjacentShapes = adjacentShapes;
     }
 
     public void StartShiftDown()
@@ -154,31 +174,12 @@ public class BoardManager : MonoBehaviour
         FindDistinctColums();
 
         foreach (int column in _distinctColumns.Keys)
-        {
             for (int i = 0; i < rows; i++)
-            {
                 if (_instantiatedShapes[i, column] != null)
                     _instantiatedShapes[i, column].GetComponent<Shape>().ShiftDown();
-            }
-        }
 
         _adjacentShapes.Clear();
-
         RefillBoard();
-    }
-
-    public void AddShapeToAdjacentShapes(Shape shape)
-    {
-        _adjacentShapes.Add(shape);
-    }
-
-    public bool IsShapeCheckedBefore(Shape _shape)
-    {
-        foreach (Shape shape in this._adjacentShapes)
-            if (shape == _shape)
-                return true;
-
-        return false;
     }
 
     private void FindDistinctColums()
@@ -192,54 +193,129 @@ public class BoardManager : MonoBehaviour
         }
     }
 
-    public void RefillBoard()
+    private void RefillBoard()
     {
         Vector2 offset = _shapeSpriteRenderer.bounds.size;
 
-        if (remainingMoves > 1)
+        foreach (int k in _distinctColumns.Keys)
         {
-            remainingMoves--;
-            moves.text = remainingMoves.ToString();
+            int counter = RefillStartPos;
+            Vector3 instantiatedTransform = new Vector3(offset.x * k,
+                                                        offset.y * rows,
+                                                        0f);
 
-
-            foreach (int k in _distinctColumns.Keys)
+            for (int i = 0; i < _distinctColumns[k]; i++)
             {
-                int counter = RefillStartPos;
-                Vector3 instantiatedTransform = new Vector3(offset.x * k,
-                                                            offset.y * rows,
-                                                            0f);
-
-                for (int i = 0; i < _distinctColumns[k]; i++)
-                {
-                    Shape refillShape = CreateShape(instantiatedTransform, rows + counter, k);
-                    refillShape.transform.localPosition = new Vector3(offset.x * k, offset.y * (rows + counter), 0f);
-                    refillShape.GetComponent<Shape>().ShiftDown(true);
-                    counter++;
-                }
+                Shape refillShape = CreateShape(instantiatedTransform, rows + counter, k);
+                refillShape.transform.localPosition = new Vector3(offset.x * k, offset.y * (rows + counter), 0f);
+                refillShape.GetComponent<Shape>().ShiftDown(true);
+                counter++;
             }
         }
-        else if (remainingMoves == 1)
-        {
-            moves.text = "0";
-            StartCoroutine(RestartButtonWithDelay(1.2f));
-        }
+
         _distinctColumns.Clear();
     }
 
+    #region Find Merge
+
+    public void FindMerges()
+    {
+        StartCoroutine(WaitFindMerges());
+    }
+
+    private IEnumerator WaitFindMerges()
+    {
+        yield return new WaitForSeconds(0.6f);
+
+        List<Shape> instantiatedShapes = Array2DToList(_instantiatedShapes);
+        List<Shape> adjacentShapes = new List<Shape>();
+
+        for (int i = 0; i < instantiatedShapes.Count; i++)
+        {
+            if (instantiatedShapes.ElementAt(i) != null)
+            {
+                instantiatedShapes.ElementAt(i).FindAdjacentShapes(true, adjacentShapes);
+                RemoveIntersections(instantiatedShapes, adjacentShapes);
+                SetMergesSprite(adjacentShapes);
+                adjacentShapes.Clear();
+            }
+        }
+    }
+
+    private void RemoveIntersections(List<Shape> instantiatedShapes, List<Shape> adjacentShapes)
+    {
+        foreach (Shape shape in instantiatedShapes.ToList())
+            if (adjacentShapes.Contains(shape))
+                instantiatedShapes.Remove(shape);
+    }
+
+    private List<Shape> Array2DToList(Shape[,] arr)
+    {
+        List<Shape> shapeList = new List<Shape>();
+
+        foreach (Shape shape in arr)
+            shapeList.Add(shape);
+
+        return shapeList;
+    }
+
+    private void SetMergesSprite(List<Shape> adjacentShapes)
+    {
+        if (adjacentShapes.Count >= 5)
+            foreach (Shape shape in adjacentShapes)
+                shape.SetMergeSprite(adjacentShapes.Count);
+    }
+
+    public void ReverseShapesSprite() 
+    {
+        foreach (Shape shape in _instantiatedShapes)
+            if(shape != null)
+                shape.ReverseShapeSprite();
+    }
+
+    #endregion
     public void ReloadShapeToList(Shape shape, int row, int col)
     {
         _instantiatedShapes[row, col] = shape;
     }
 
+    public void IncreaseDistinctColumns(int col)
+    {
+        if (!_distinctColumns.ContainsKey(col))
+            _distinctColumns.Add(col, 1);
+        else
+            _distinctColumns[col] += 1;
+    }
+
+    public void DecreaseRemainingMoves()
+    {
+        if (remainingMoves > 0)
+        {
+            remainingMoves--;
+            moves.text = remainingMoves.ToString();
+        }
+
+        if (remainingMoves == 0)
+        {
+            StartCoroutine(RestartButtonWithDelay(1.2f));
+        }
+    }
+
     public Dictionary<int, int> GetDistinctColumns()
     {
         return _distinctColumns;
-    } 
+    }
 
     public List<Shape> GetAdjacentShapes()
     {
         return _adjacentShapes;
     }
+
+    public List<int> GetExplodedRows()
+    {
+        return _explodedRows;
+    }
+
     public Shape[,] GetInstantiatedShapes()
     {
         return _instantiatedShapes;
@@ -258,6 +334,29 @@ public class BoardManager : MonoBehaviour
     public Shape[,] GetShapeMatrix()
     {
         return _instantiatedShapes;
+    }
+
+    public ShapeData GetShapeData(ShapeType shapeType, ShapeColor shapeColor)
+    {
+        foreach (ShapeData shapeData in shapeDatas)
+            if (shapeData.ShapeType == shapeType && shapeData.ShapeColor == shapeColor)
+                return shapeData;
+
+        return null;
+    }
+
+    public Sprite GetMergeSprite(CubeOperation cubeOperation, string color)
+    {
+        string spriteName = color;
+
+        if (cubeOperation == CubeOperation.TurnIntoRocket)
+            spriteName += "_rocket_cube";
+        else if (cubeOperation == CubeOperation.TurnIntoBomb)
+            spriteName += "_bomb_cube";
+        else if (cubeOperation == CubeOperation.TurnIntoDisco)
+            spriteName += "_disco_cube";
+
+        return mergeSprites.Find(sprt => sprt.name == spriteName);
     }
 
     public void RemoveFromInstantiatedShapes(int row, int col)
@@ -282,6 +381,18 @@ public class BoardManager : MonoBehaviour
         yield return new WaitForSeconds(time);
         noMovesLeft.SetActive(true);
         tint.SetActive(true);
+    }
+
+    public bool isMovesLeft()
+    {
+        if (remainingMoves > 0)
+        {
+            return true;
+        }
+        else
+        {
+            return false;
+        }
     }
 
 }
